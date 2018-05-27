@@ -1,5 +1,4 @@
 import os
-import pandas as pd
 import numpy as np
 
 
@@ -23,7 +22,7 @@ def company_jobs(train_data):
 
 
 def main():
-    data_path = "indeed_data_science_exercise_data"
+    data_path = "../data/bangkok_test_data"
     train_feature_file = "train_features_2013-03-07.csv"
     train_salary_file = "train_salaries_2013-03-07.csv"
     test_feature_file = "test_features_2013-03-07.csv"
