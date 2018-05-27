@@ -1,0 +1,6 @@
+*.pdf
+*.pyc
+data/*
+*.ipynb
+.idea/*
+.DS_Store
