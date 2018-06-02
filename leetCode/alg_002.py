@@ -46,3 +46,21 @@ class Solution:
             n.next = ListNode(cur_value)
             n = n.next
         return root.next
+
+
+if __name__ == "__main__":
+
+    l1 = ListNode(2)
+    l1.next = ListNode(4)
+    l1.next.next = ListNode(3)
+
+    l2 = ListNode(5)
+    l2.next = ListNode(6)
+    l2.next.next = ListNode(4)
+
+    test = Solution()
+    result_root = test.addTwoNumbers(l1, l2)
+
+    while result_root is not None:
+        print(result_root.val)
+        result_root = result_root.next
