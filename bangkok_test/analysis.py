@@ -1,5 +1,8 @@
 import os
+import pandas as pd
 import numpy as np
+from preprocessing import read_data
+from config import data_path, train_feature_file, train_salary_file
 
 
 def company_salary(train_data):
@@ -20,28 +23,36 @@ def company_jobs(train_data):
         print(np.unique(job_type_arr, return_counts=True))
 
 
+def salary_by_types(train_data, column):
+
+    with_degree_mean = train_data[train_data[column] != "NONE"]["salary"].mean()
+    with_degree_std = train_data[train_data[column] != "NONE"]["salary"].std()
+
+    none_degree_mean = train_data[train_data[column] == "NONE"]["salary"].mean()
+    none_degree_std = train_data[train_data[column] == "NONE"]["salary"].std()
+    print("with {} mean salary {} and std salary {}".format(column, with_degree_mean, with_degree_std))
+    print("without {} mean salary {} and std salary {}".format(column, none_degree_mean, none_degree_std))
+
 
 def main():
-    data_path = "../data/bangkok_test_data"
-    train_feature_file = "train_features_2013-03-07.csv"
-    train_salary_file = "train_salaries_2013-03-07.csv"
-    test_feature_file = "test_features_2013-03-07.csv"
 
-    train_feature = read_feature_data(os.path.join(data_path, train_feature_file))
+    train_feature = read_data(os.path.join(data_path, train_feature_file))
     print(train_feature.head())
 
-    train_salaries = read_feature_data(os.path.join(data_path, train_salary_file))
+    train_salaries = read_data(os.path.join(data_path, train_salary_file))
     print(train_salaries.head())
 
+    train_data = pd.merge(train_feature, train_salaries, how="left", on="jobId")
+    print(train_data.head())
 
     salary_info = company_salary(train_data)
     print(salary_info)
 
-    #company_jobs(train_data)
+    salary_by_types(train_data, "degree")
 
-    print(train_data[train_data["jobType"] == "CEO"][["companyId", "salary"]].groupby("companyId").mean())
+    salary_by_types(train_data, "major")
+    company_jobs(train_data)
 
-    #test_feature = read_feature_data(os.path.join(data_path, test_feature_file))
 
 if __name__ == "__main__":
     main()

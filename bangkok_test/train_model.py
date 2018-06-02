@@ -1,33 +1,30 @@
 import os
 import numpy as np
+import itertools
 from sklearn.preprocessing import OneHotEncoder
-from sklearn import neighbors
+from sklearn.neighbors import KNeighborsRegressor
 from sklearn.linear_model import LinearRegression
-from sklearn.naive_bayes import GaussianNB
-from sklearn.model_selection import cross_val_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
-from xgboost import XGBClassifier
-
-from config import categorical_columns
+from sklearn.model_selection import KFold
+from xgboost import XGBRegressor
+from config import categorical_columns, VALUE_MODEL_KNN, VALUE_MODEL_XGBOOST, VALUE_MODEL_LR, \
+    VALUE_MODEL_RF, VALUE_MODEL_LOGREG, model_info_list, train_feature_file, train_salary_file, \
+    test_feature_file, data_path
 from preprocessing import preprocessing
-
-VALUE_MODEL_LR = "linearReg"
-VALUE_MODEL_XGBOOST = "xgbc"
-VALUE_MODEL_GNB = "GaussianNB"
 
 
 def encode_fit(train_feature):
+    print("before encoding the feature columns are:")
+    print(train_feature.columns)
     train_cols = train_feature.columns.tolist()
     index_arr = [train_cols.index(col) for col in categorical_columns if col in train_cols]
     numerical_cols = list(set(train_cols) - set(categorical_columns))
 
-    print("categorical columns: ")
-    print([train_cols[id] for id in index_arr])
-    print("numerical columns: ")
-    print(numerical_cols)
-
     enc = OneHotEncoder(categorical_features=index_arr)
     enc.fit(train_feature)
+    print(enc.feature_indices_)
     return enc, numerical_cols
 
 
@@ -36,7 +33,6 @@ def encode_transform_feature(feature_df, enc):
 
 
 def feature_normalization(feature_df, col, min_value=-1, max_value=-1):
-
     if col not in feature_df.columns:
         raise Exception("{} column does not exist in the input dataframe!".format(col))
 
@@ -51,98 +47,104 @@ def feature_normalization(feature_df, col, min_value=-1, max_value=-1):
 
 
 def feature_transformation(feature_df, enc=None, numerical_cols=[]):
-
     if enc is None:
         enc, numerical_cols = encode_fit(feature_df)
 
-    #for col in numerical_cols:
-    #    feature_df = feature_normalization(feature_df, col)
-    #print(feature_df[numerical_cols].head())
-
+    for col in numerical_cols:
+        feature_df = feature_normalization(feature_df, col)
     feature_array = encode_transform_feature(feature_df, enc)
-    return feature_array
+    return feature_array, enc, numerical_cols
 
 
-def test_linearReg_model(x, y):
-    lr = LinearRegression().fit(x, y)
-    y_ = lr.predict(x)
-    error = mean_squared_error(y, y_)
-    print("Linear regression model error {}".format(error))
-    return y_, error
+def train_model(x_train, y_train, model_info):
+    if model_info[0] == VALUE_MODEL_LR:
+        clf = LinearRegression().fit(x_train, y_train)
+    elif model_info[0] == VALUE_MODEL_XGBOOST:
+        n_estimator = model_info[1][0]
+        max_depth = model_info[1][1]
+        clf = XGBRegressor(n_estimators=n_estimator, max_depth=max_depth).fit(x_train, y_train)
+    elif model_info[0] == VALUE_MODEL_KNN:
+        n_neighbors = model_info[1]
+        clf = KNeighborsRegressor(n_neighbors).fit(x_train, y_train)
+    elif model_info[0] == VALUE_MODEL_RF:
+        n_estimator = model_info[1][0]
+        max_depth = model_info[1][1]
+        clf = RandomForestRegressor(n_estimators=n_estimator, max_depth=max_depth).fit(x_train, y_train)
+    elif model_info[0] == VALUE_MODEL_LOGREG:
+        clf = LogisticRegression().fit(x_train, y_train)
+    return clf
 
 
-def test_models(x_tran, y, model_name):
-
-    if model_name == VALUE_MODEL_LR:
-        clf = LinearRegression()
-    elif model_name == VALUE_MODEL_GNB:
-        clf = GaussianNB()
-    elif model_name == VALUE_MODEL_XGBOOST:
-        clf = XGBClassifier()
-    scores = cross_val_score(clf, x_tran, y, scoring="neg_mean_squared_error", cv=5)
-    return np.mean(-scores)
-
-
-# def test_knn_model(x, y, n_neighbors):
-#     knn = neighbors.KNeighborsRegressor(n_neighbors)
-#     cnn_model = knn.fit(x, y)
-#     y_ = cnn_model.predict(x)
-#     error = mean_squared_error(y, y_)
-#     print([n_neighbors, error])
-#     return y_, error
+def test_single_model(x, y, model_info, cv_num=5):
+    kf = KFold(cv_num)
+    true_y = []
+    pred_y = []
+    for train_index, test_index in kf.split(x):
+        x_train, x_test = x[train_index], x[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+        clf = train_model(x_train, y_train, model_info)
+        y_pred = clf.predict(x_test)
+        true_y.extend(y_test)
+        pred_y.extend(y_pred)
+    return true_y, pred_y
 
 
-# def model_testing(train_x, train_y):
-#     # model testing based on one single model
-#     enc = encode_fit(train_x)
-#     train_x_tran = transform_feature(train_x, enc)
-#     test_linearReg_model(train_x_tran, train_y)
-#     test_knn_model(train_x, train_y, 3)
-#
-#     # build jobType-based models
-#     pred_y = []
-#     act_y = []
-#     jobId_list = train_x["jobType"].unique().tolist()
-#     for jobId in jobId_list:
-#         cur_index = train_x[train_x["jobType"] == jobId].index
-#         cur_train_x = train_x.loc[cur_index]
-#         cur_train_y = train_y[cur_index]
-#         act_y.extend(cur_train_y)
-#         print([jobId, len(cur_index)])
-#
-#         cur_enc = encode_fit(cur_train_x)
-#         cur_train_x_tran = transform_feature(cur_train_x, cur_enc)
-#         cur_pred, error = test_linearReg_model(cur_train_x_tran, cur_train_y)
-#         pred_y.extend(cur_pred)
-#     overall_error = mean_squared_error(act_y, pred_y)
-#     print(overall_error)
+def group_data(train_jobTypes):
+    # group by jobType
+    train_data_dict = dict()
+    jobType_list = np.unique(train_jobTypes)
+    for jobType in jobType_list:
+        index = np.where(train_jobTypes == jobType)[0]
+        train_data_dict[jobType] = index
+    return train_data_dict
+
+
+def model_evaluation(train_x_tran, train_y, train_data_dict, model_info_list):
+    # jobType-based modelling
+    for model_info in model_info_list:
+        pred_y = []
+        true_y = []
+        print("Evaluation for model {}".format(model_info[0]))
+        print(model_info[1])
+        for jobType, index in train_data_dict.items():
+            cur_train_x_tran = train_x_tran[index]
+            cur_train_y = train_y[index]
+            cur_true_y, cur_pred_y = test_single_model(cur_train_x_tran, cur_train_y, model_info)
+            pred_y.extend(cur_pred_y)
+            true_y.extend(cur_true_y)
+            cur_error = mean_squared_error(cur_true_y, cur_pred_y)
+            print("-- MSE for jobType {} is {}".format(jobType, cur_error))
+        error = mean_squared_error(true_y, pred_y)
+        print("Overall MSE is {}".format(error))
+
+
+def generate_xgboost_parameters():
+    tree_num_list = range(500, 0, -200)
+    depth_list = range(5, 2, -1)
+    tree_depth_list = list(itertools.product(tree_num_list, depth_list))
+    xgboost_model_info = []
+    for param in tree_depth_list:
+        xgboost_model_info.append((VALUE_MODEL_XGBOOST, list(param)))
+    return xgboost_model_info
 
 
 def main():
 
-    data_path = "../data/bangkok_test_data"
-    train_feature_file = "train_features_2013-03-07.csv"
-    train_salary_file = "train_salaries_2013-03-07.csv"
-    test_feature_file = "test_features_2013-03-07.csv"
-
     model_data = preprocessing(os.path.join(data_path, train_feature_file),
                                os.path.join(data_path, train_salary_file),
                                os.path.join(data_path, test_feature_file),
-                               remove_cols=["companyId"])
+                               remove_cols=["companyId", "jobType"])
 
     train_x = model_data["train"]["features"]
-    train_y = model_data["train"]["labels"]
+    train_y = np.array(model_data["train"]["labels"])
+    train_jobTypes = model_data["train"]["jobTypes"]
+    train_data_dict = group_data(train_jobTypes)
     print(train_x.head())
 
-    train_x_tran = feature_transformation(train_x)
+    train_x_tran, _, _ = feature_transformation(train_x)
     print(train_x_tran.shape)
-    print(train_x_tran[0, -3:])
-    for model_name in [VALUE_MODEL_LR]:
-        print("running model {}".format(model_name))
-        #error = test_models(train_x_tran, train_y, model_name)
 
-        _, error = test_linearReg_model(train_x_tran, train_y)
-        print([model_name, error])
+    model_evaluation(train_x_tran, train_y, train_data_dict, model_info_list)
 
 
 if __name__ == "__main__":
