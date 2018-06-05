@@ -32,7 +32,7 @@ class Solution:
 
         while x > 0:
             digit = x % 10
-            result = result* 10 + digit
+            result = result * 10 + digit
             x = int(x/10)
         if result < -pow(2, 31) or result > pow(2, 31) - 1:
             return 0
