@@ -1,7 +1,13 @@
 *.pdf
 *.pyc
+
 data/*
 *.ipynb
+
+*/.idea/*
 .idea/*
+
 .DS_Store
 *.csv
+
+venv
